@@ -23,6 +23,10 @@ package com.iemr.hwc.controller.fetosense;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.UnknownHostException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +40,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.iemr.hwc.data.fetosense.Fetosense;
+import com.iemr.hwc.data.fetosense.FetosenseData;
 import com.iemr.hwc.service.fetosense.FetosenseService;
 import com.iemr.hwc.utils.exception.IEMRException;
 import com.iemr.hwc.utils.mapper.InputMapper;
@@ -190,7 +197,20 @@ public class FetosenseController {
 		OutputResponse response = new OutputResponse();
 		logger.info("Fetosense API test result data  :" + requestObj);
 		try {
-			if (requestObj != null) {
+			Gson gson = new Gson();
+			JsonObject jsonObject = gson.fromJson(requestObj, JsonObject.class);
+			String reportPath = jsonObject.get("reportPath").getAsString();
+			URL url = new URL(reportPath);
+			InetAddress inetAddress = InetAddress.getByName(url.getHost());
+			if (requestObj != null && 
+				(url.getProtocol().startsWith("http") ||
+				url.getProtocol().startsWith("https")) &&
+				url.getHost().endsWith(".cloudfunctions.net") &&
+				url.getHost().equals("https://cloudfunctions.net") &&
+				!inetAddress.isAnyLocalAddress() &&
+				!inetAddress.isLoopbackAddress() &&
+				!inetAddress.isLinkLocalAddress()
+			) {
 				Fetosense fetosenseData = InputMapper.gson().fromJson(requestObj, Fetosense.class);
 				int responseValue = fetosenseService.updateFetosenseData(fetosenseData);
 				if (responseValue == 1)
@@ -203,7 +223,13 @@ public class FetosenseController {
 			response.setError(5000, e.getMessage());
 			logger.error("Error while updating fetosense data :" + e);
 		}
+		catch (MalformedURLException e) {
+			response.setError(5001, e.getMessage());
+			logger.error("reportPath is not a valid URI :" + e);
+		} catch (UnknownHostException e) {
+			response.setError(5002, e.getMessage());
+			logger.error("reportPath contains UnknownHostException :" + e);
+		}
 		return response.toStringWithHttpStatus();
 	}
-
 }
